@@ -21,6 +21,8 @@ def transcribe_and_save(file_path, url=None, title=None, description=None):
     """Transcribe a single audio/video file and save the transcript to disk."""
     path = os.path.dirname(file_path)
     filename = os.path.basename(file_path)
+    print("path:"+path)
+    print("filename:"+filename)
     try:
         result = transcribe_audio(file_path)
         text = result["text"]
@@ -102,8 +104,8 @@ def transcribe_audio(audio_file_path):
     """Transcribe audio using Whisper AI."""
     try:
         print("Transcribing the audio file...")
-        model = load_model("large-v2")
-        result = model.transcribe(audio_file_path, language="en", verbose=True)
+        model = load_model("large-v3")
+        result = model.transcribe(audio_file_path, language="en", verbose=True, temperature=0.2)
         return result
 
     except Exception as e:
@@ -117,7 +119,7 @@ def openai_summarize_text(text, api_key):
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "Make a detailed takeaway of the text."},
+                {"role": "system", "content": "Make a detailed takeaway of the text,and then an insight. If there is any sell rules, buy rules, and numbers, make sure include them in the takeaway."},
                 {"role": "user", "content": text}
             ],
             temperature=1,
@@ -200,7 +202,7 @@ def print_usage():
     print("Error in command line arguments.")
     print("Usage:")
     print("  python3 vsm_main.py -a <youtube-video-url> -p <path/to/save/file>")
-    print("  python3 vsm_main.py -v <youtube-video-id> -p <path/to/save/file>")
+    print("  python3 vsm_main.py -v <youtube-video-url> -p <path/to/save/file>")
     print("  python3 vsm_main.py -t <path/to/audio/file>")
     print("  python3 vsm_main.py -f <file/to/summary>")
     print("  python3 vsm_main.py -c <string/to/summary>")
@@ -248,8 +250,8 @@ def main():
         summary = openai_summarize_text(text, api_key)
         #summary = ollama_summarize(text)
         print(summary)
-        if transcription_file:
-            with open(f"{transcription_file}.takeaway.txt",'w', encoding='utf-8') as file:
+        if audio_file_path:
+            with open(f"{audio_file_path}.takeaway.txt",'w', encoding='utf-8') as file:
                 file.write(summary)
     if root:
         traverse_and_transcribe(root)
