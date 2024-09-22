@@ -19,8 +19,8 @@ This Python script allows you to download, transcribe, and summarize audio and v
 
 1. Clone this repository:
     ```sh
-    git clone https://github.com/your-username/your-repo-name.git
-    cd your-repo-name
+    git clone https://github.com/github.com/Zishuo/vsm
+    cd vsm
     ```
 
 2. Install the required Python packages:
