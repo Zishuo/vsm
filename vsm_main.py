@@ -7,7 +7,7 @@ from whisper import available_models, load_model
 from whisper.utils import get_writer
 from openai import OpenAI
 import ollama
-
+transcribe_model = None
 
 def is_audio_or_video_file(file_name):
     """Determines if a given file is an audio or video file based on its extension."""
@@ -21,13 +21,14 @@ def transcribe_and_save(file_path, url=None, title=None, description=None):
     """Transcribe a single audio/video file and save the transcript to disk."""
     path = os.path.dirname(file_path)
     filename = os.path.basename(file_path)
+    filename_without_extension = os.path.splitext(filename)[0]
     print("path:"+path)
     print("filename:"+filename)
     try:
         result = transcribe_audio(file_path)
         text = result["text"]
         print(f"Transcription complete:\n{text}")
-        transcription_file = f"{file_path}.txt"
+        transcription_file = f"{filename_without_extension}.txt"
         with open(transcription_file, "w", encoding='utf-8') as file:
             if(url):
                 file.write(f"URL: {url}\n")
@@ -102,10 +103,12 @@ def download_youtube_video(url, path, video_mode=False):
 
 def transcribe_audio(audio_file_path):
     """Transcribe audio using Whisper AI."""
+    global transcribe_model
     try:
         print("Transcribing the audio file...")
-        model = load_model("large-v3")
-        result = model.transcribe(audio_file_path, language="en", verbose=True, temperature=0.2)
+        if transcribe_model is None:
+            transcribe_model = load_model("medium.en")
+        result = transcribe_model.transcribe(audio_file_path, verbose=True, temperature=0.2, no_speech_threshold=0.2, word_timestamps=True, hallucination_silence_threshold=1)
         return result
 
     except Exception as e:
@@ -119,7 +122,7 @@ def openai_summarize_text(text, api_key):
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "Make a detailed takeaway of the text,and then an insight. If there is any sell rules, buy rules, and numbers, make sure include them in the takeaway."},
+                {"role": "system", "content": "Make a detailed takeaway of the text,and then an insight. If there is any sell rules, buy rules, and numbers, make sure include them in the takeaway. Please use the MD file syntax."},
                 {"role": "user", "content": text}
             ],
             temperature=1,
