@@ -218,7 +218,7 @@ def main():
     video_mode = False
     root = ""
     transcription_file = ""
-
+    takeaway_file=""
     try:
         if "-a" in args:
             url = args[args.index("-a")+1]
@@ -229,12 +229,14 @@ def main():
             path = args[args.index("-p")+1]
         if "-t" in args:
             audio_file_path = args[args.index("-t")+1]
+            takeaway_file = takeaway_file = os.path.splitext(audio_file_path)[0]
         if "-c" in args:
             text = args[args.index("-c")+1]
         if "-f" in args:
             print("open " + args[args.index("-f")+1])
             with open(args[args.index("-f")+1], 'r') as file:
                 text = file.read()
+            takeaway_file = os.path.splitext(file.name)[0]
         if "-r" in args:
             root = args[args.index("-r")+1]
     except:
@@ -253,8 +255,10 @@ def main():
         summary = openai_summarize_text(text, api_key)
         #summary = ollama_summarize(text)
         print(summary)
-        if audio_file_path:
-            with open(f"{audio_file_path}.takeaway.txt",'w', encoding='utf-8') as file:
+        if takeaway_file:
+            takeaway_file = f"{takeaway_file}.takeaway.txt"
+            print("save to file:"+takeaway_file)
+            with open(takeaway_file,'w', encoding='utf-8') as file:
                 file.write(summary)
     if root:
         traverse_and_transcribe(root)
