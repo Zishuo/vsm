@@ -2,20 +2,106 @@
 import sys
 import os
 import subprocess
-from pytube import YouTube
+import yt_dlp
+from datetime import datetime
 from whisper import available_models, load_model
 from whisper.utils import get_writer
 from openai import OpenAI
 import ollama
 transcribe_model = None
 
+def download_youtube_transcript(url, path):
+    """Download the transcript of a YouTube video in SRT format using yt-dlp"""
+    try:
+        ydl_opts = {
+            'skip_download': True,
+            'writesubtitles': True,
+            'writeautomaticsub': True,
+            'subtitlesformat': 'srt',
+            'subtitleslangs': ['en.*', 'a.*'],
+            'quiet': True,
+            'outtmpl': os.path.join(path, '%(title)s.%(ext)s'),
+        }
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            title = info.get('title', 'video').replace(' ', '_')
+            ydl.download([url])
+
+        file_path = os.path.join(path, f"{title}.en.srt")
+        if not os.path.exists(file_path):
+            file_path = os.path.join(path, f"{title}.a.en.srt")
+
+        if os.path.exists(file_path):
+            print("Transcript downloaded successfully!")
+            return file_path
+
+        raise ValueError("No English transcripts found")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return None
+
+def download_youtube_video(url, path, video_mode=False):
+    """Download the video or audio from a YouTube URL using yt-dlp"""
+    try:
+        ydl_opts = {
+            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best' if video_mode else 'bestaudio',
+            'outtmpl': os.path.join(path, '%(upload_date)s-%(title)s.%(ext)s'),
+            'quiet': True,
+            'postprocessors': [],
+        }
+        if not video_mode:
+            ydl_opts['postprocessors'].append({
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'wav',
+            })
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            title = info.get('title', 'video').replace(' ', '_')
+            description = info.get('description', '')
+            upload_date = info.get('upload_date', datetime.now().strftime('%Y%m%d'))
+            ydl.download([url])
+
+        ext = 'mp4' if video_mode else 'wav'
+        file_name = f"{upload_date}-{title}.{ext}"
+        final_path = os.path.join(path, file_name)
+        print(f"{'Video' if video_mode else 'Audio'} downloaded successfully!")
+        return title, description, final_path
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return None, None, None
+
+def transcribe_audio(audio_file_path):
+    """Transcribe audio using Whisper AI and translate to English."""
+    global transcribe_model
+    try:
+        print("Transcribing the audio file...")
+        if transcribe_model is None:
+            transcribe_model = load_model("large-v3")
+
+        # Transcribe the audio file
+        result = transcribe_model.transcribe(
+            audio_file_path,
+            task="translate",
+            temperature=0.2,
+            no_speech_threshold=0.2,
+            word_timestamps=True,
+            hallucination_silence_threshold=1
+        )
+        return result
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return None
+
+
 def is_audio_or_video_file(file_name):
     """Determines if a given file is an audio or video file based on its extension."""
     audio_video_extensions = {'.mp3', '.wav', '.mp4', '.m4a', '.flv', '.avi', '.mov', '.wmv', '.mkv'}
     _, ext = os.path.splitext(file_name)
     return ext.lower() in audio_video_extensions
-
-
 
 def transcribe_and_save(file_path, url=None, title=None, description=None):
     """Transcribe a single audio/video file and save the transcript to disk."""
@@ -52,81 +138,20 @@ def transcribe_and_save(file_path, url=None, title=None, description=None):
 
 
 
-
-
-def download_youtube_transcript(url, path):
-    """Download the transcript of a YouTube video in SRT format."""
-    try:
-        video = YouTube(url)
-        transcript_list = video.captions.all()
-        if not transcript_list:
-            raise ValueError("No transcripts found")
-
-        transcript = video.captions.get_by_language_code(transcript_list[0].code)
-        if not transcript:
-            raise ValueError("Transcript not found for the specified language")
-
-        transcript_srt = transcript.generate_srt_captions()
-        file_path = f"{path}/{video.title.replace(' ', '_')}.srt"
-        with open(file_path, 'w') as f:
-            f.write(transcript_srt)
-        print("Transcript downloaded successfully!")
-        return file_path
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        return None
-
-def download_youtube_video(url, path, video_mode=False):
-    """Download the video or audio from a YouTube URL."""
-    try:
-        video = YouTube(url)
-        print(f"Title: {video.title}")
-        print(f"Description: {video.description}")
-
-        file_name = f"{video.publish_date.date()}-{video.title.replace(' ', '_')}"
-        if video_mode:
-            stream = video.streams.get_highest_resolution()
-            file_extension = "mp4"
-        else:
-            stream = video.streams.get_audio_only()
-            file_extension = "wav"
-
-        final_path = f"{path}/{file_name}.{file_extension}"
-        stream.download(path, f"{file_name}.{file_extension}")
-        print(f"{'Video' if video_mode else 'Audio'} downloaded successfully!")
-
-        return video.title, video.description, final_path
-
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        return None, None, None
-
-def transcribe_audio(audio_file_path):
-    """Transcribe audio using Whisper AI."""
-    global transcribe_model
-    try:
-        print("Transcribing the audio file...")
-        if transcribe_model is None:
-            transcribe_model = load_model("medium.en")
-        result = transcribe_model.transcribe(audio_file_path, verbose=True, temperature=0.2, no_speech_threshold=0.2, word_timestamps=True, hallucination_silence_threshold=1)
-        return result
-
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        return None
-
 def openai_summarize_text(text, api_key):
-    """Summarize the text using OpenAI GPT."""
+    """Summarize the text using AI SERVICE:"""
+    print(api_key)
     try:
-        client = OpenAI(api_key=api_key)
+        client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model="deepseek-chat",
             messages=[
                 {"role": "system", "content": "Make a detailed takeaway of the text,and then an insight. If there is any sell rules, buy rules, and numbers, make sure include them in the takeaway. Please use the MD file syntax."},
                 {"role": "user", "content": text}
             ],
             temperature=1,
-            max_tokens=4096
+            stream=False,
+            max_tokens=8192,
         )
         return response.choices[0].message.content
 
@@ -173,7 +198,6 @@ def ollama_summarize(text):
         }
     }
 
-
     headers = {
         'Content-Type': 'application/json'
     }
@@ -195,7 +219,7 @@ def traverse_and_transcribe(root_path):
                 # Transcribe file
                 text = transcribe_and_save(file_path)
                 #get OPEN AI key from os environment variable.
-                api_key = os.environ['OPENAI_API_KEY']
+                api_key = os.environ['DEEPSEEK_API_KEY']
                 summary = openai_summarize_text(text, api_key)
                 with open(f"{file_path}.takeaway.txt",'w', encoding='utf-8') as file:
                     file.write(summary)
@@ -250,8 +274,8 @@ def main():
     if audio_file_path:
         text = transcribe_and_save(audio_file_path,url,title,description)
     if text:
-        #get OPEN AI key from os environment variable.
-        api_key = os.environ['OPENAI_API_KEY']
+        #get key from os environment variable.
+        api_key = os.environ['DEEPSEEK_API_KEY']
         summary = openai_summarize_text(text, api_key)
         #summary = ollama_summarize(text)
         print(summary)
