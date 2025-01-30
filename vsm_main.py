@@ -84,11 +84,13 @@ def transcribe_audio(audio_file_path):
         # Transcribe the audio file
         result = transcribe_model.transcribe(
             audio_file_path,
-            task="translate",
-            temperature=0.2,
-            no_speech_threshold=0.2,
-            word_timestamps=True,
-            hallucination_silence_threshold=1
+        #    task="translate",
+            verbose= True,
+            temperature=(0.1, 0.6),  # Range better than single value
+            no_speech_threshold=1,
+        #    word_timestamps=False,
+        #    hallucination_silence_threshold=3,
+        #    language="ja",  # Japanese audio
         )
         return result
 
@@ -141,6 +143,7 @@ def transcribe_and_save(file_path, url=None, title=None, description=None):
 def openai_summarize_text(text, api_key):
     """Summarize the text using AI SERVICE:"""
     print(api_key)
+    print(text)
     try:
         client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
         response = client.chat.completions.create(
