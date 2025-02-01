@@ -1,133 +1,92 @@
-# Video and Audio Transcription and Summarization Script
+I'll help you create a basic README.md file for your project. Here's a markdown file that documents the key aspects of your video summary manager:
 
-This Python script allows you to download, transcribe, and summarize audio and video files. It supports direct audio/video file transcription, downloading from YouTube, and summarization using the OpenAI and Ollama APIs.
+```markdown:README.md
+# Video Summary Manager (VSM)
+
+A Python tool for downloading, transcribing, and summarizing video/audio content from YouTube or local files.
 
 ## Features
 
-- **Download and Transcribe Audio/Video from YouTube**
-- **Transcribe Local Audio/Video Files**
-- **Generate SRT Subtitles**
-- **Summarize Transcriptions Using OpenAI GPT**
-- **Summarize Transcriptions Using Ollama API**
-
-## Requirements
-
-- Python 3.x
-- Required Python packages: `pytube`, `whisper`, `openai`, `ollama`
+- 🎥 Download YouTube videos or audio
+- 📝 Automatic transcription using Whisper AI
+- 🤖 AI-powered summarization using Deepseek or Ollama
+- 📂 Batch processing of audio/video files
+- 📄 Save transcriptions and summaries in multiple formats (txt, srt)
 
 ## Installation
 
-1. Clone this repository:
-    ```sh
-    git clone https://github.com/Zishuo/vsm/
-    cd vsm
-    ```
+1. Clone the repository:
+```bash
+git clone https://github.com/yourusername/video-summary-manager.git
+cd video-summary-manager
+```
 
-2. Install the required Python packages:
-    ```sh
-    pip install pytube whisper openai ollama
-    ```
+2. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
 
-3. Set up your OpenAI API key:
-    ```sh
-    export OPENAI_API_KEY="your-openai-api-key"
-    ```
+3. Set up environment variables:
+```bash
+export DEEPSEEK_API_KEY="your_api_key_here"
+```
 
 ## Usage
 
-### Download and Transcribe a YouTube Video
+### Basic Commands
 
-```sh
-python3 vsm_main.py -a <youtube-video-url> -p <path/to/save/file>
+- Download and transcribe YouTube audio:
+```bash
+python vsm_main.py -a "https://www.youtube.com/watch?v=example" -p ./output
 ```
 
-### Download and Transcribe a YouTube Video (Video Mode)
-
-```sh
-python3 vsm_main.py -v <youtube-video-url> -p <path/to/save/file>
+- Download and transcribe YouTube video:
+```bash
+python vsm_main.py -v "https://www.youtube.com/watch?v=example" -p ./output
 ```
 
-### Transcribe a Local Audio/Video File
-
-```sh
-python3 vsm_main.py -t <path/to/audio/file>
+- Transcribe local audio/video file:
+```bash
+python vsm_main.py -t /path/to/file.mp4
 ```
 
-### Summarize a Text File
-
-```sh
-python3 vsm_main.py -f <file/to/summary>
+- Summarize text file:
+```bash
+python vsm_main.py -s /path/to/transcript.txt
 ```
 
-### Summarize a Text String
-
-```sh
-python3 vsm_main.py -c <string/to/summary>
+- Process all audio/video files in a directory:
+```bash
+python vsm_main.py -r /path/to/directory
 ```
 
-### Traverse Directories and Transcribe Audio/Video Files
+### Output Files
 
-```sh
-python3 vsm_main.py -r <root/directory/path>
-```
+For each processed file, the tool generates:
+- `.txt` - Full transcription
+- `.srt` - Subtitle file
+- `.takeaway.txt` - AI-generated summary
 
-## Example
+## Requirements
 
-Download and transcribe a YouTube video, then summarize the transcription:
+- Python 3.8+
+- Whisper AI (large-v3-turbo model)
+- yt-dlp
+- OpenAI/Deepseek API key
+- Optional: Ollama for local summarization
 
-```sh
-python3 vsm_main.py -a https://www.youtube.com/watch?v=example -p ./downloads/
-```
+## Configuration
 
-## Functions
+The tool uses the following environment variables:
+- `DEEPSEEK_API_KEY` - Required for AI summarization
 
-### `is_audio_or_video_file(file_name)`
+## Contributing
 
-Determines if a given file is an audio or video file based on its extension.
-
-### `transcribe_and_save(file_path, url=None, title=None, description=None)`
-
-Transcribes a single audio/video file and saves the transcript to disk and as an SRT file.
-
-### `download_youtube_transcript(url, path)`
-
-Downloads the transcript of a YouTube video in SRT format.
-
-### `download_youtube_video(url, path, video_mode=False)`
-
-Downloads the video or audio from a YouTube URL.
-
-### `transcribe_audio(audio_file_path)`
-
-Transcribes audio using Whisper AI.
-
-### `openai_summarize_text(text, api_key)`
-
-Summarizes the text using OpenAI GPT.
-
-### `ollama_summarize(text)`
-
-Summarizes text using the Ollama API.
-
-### `traverse_and_transcribe(root_path)`
-
-Walks through all subfolders and transcribes audio/video files.
-
-## Error Handling
-
-The script includes error handling for various operations like downloading videos, transcribing audio, and summarizing text.
+Contributions are welcome! Please open an issue or pull request for any improvements.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT License
+```
 
-## Acknowledgements
-
-- [Pytube](https://github.com/nficano/pytube)
-- [OpenAI](https://openai.com)
-- [Whisper](https://github.com/openai/whisper)
-- [Ollama](https://github.com/ollama)
-
----
-
-Feel free to customize this README to match your project's specific details and structure.
+This README provides a comprehensive overview of your project. You can customize it further with additional details about your specific implementation or requirements. The markdown format makes it easy to read both in raw form and when rendered on GitHub or other platforms.
