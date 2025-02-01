@@ -82,9 +82,17 @@ def download_youtube_video(url, path, video_mode=False):
         if not video_mode:
             final_ydl_opts['postprocessors'].append({
                 'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'wav',
+                'preferredcodec': 'mp3',
                 'preferredquality': '192',
             })
+
+        # Check if file already exists before downloading
+        pattern = os.path.join(path, f"{upload_date}_{title}.*" if upload_date else f"{title}.*")
+        existing_files = glob.glob(pattern)
+
+        if existing_files:
+            print(f"[vsm] File already exists, skipping download: {existing_files[0]}")
+            return title, description, existing_files[0]
 
         # Perform actual download
         with yt_dlp.YoutubeDL(final_ydl_opts) as ydl:
@@ -118,14 +126,28 @@ def transcribe_audio(audio_file_path):
         if transcribe_model is None:
             transcribe_model = load_model("large-v3-turbo")
 
+        # Extract filename without extension for context
+        filename = os.path.splitext(os.path.basename(audio_file_path))[0]
+
         # Full transcription with detected or forced language
         result = transcribe_model.transcribe(
             audio_file_path,
             language="en",  # Force English
             verbose=True,
-            temperature=(0.1, 0.6),
-            no_speech_threshold=0.8,
+            temperature=(0.0, 0.1),  # Even lower temperature for more stability
+            no_speech_threshold=0.95,  # Higher threshold to better handle silence
+            logprob_threshold=-0.8,  # More strict confidence threshold
+            compression_ratio_threshold=2.6,  # More strict repetition detection
+            condition_on_previous_text=False,
+            initial_prompt=f"Transcribe the following audio clearly and accurately. Avoid repetitions and filler words. The content is about: {filename}.",
+            word_timestamps=True,
+            beam_size=5,  # Required for patience parameter
+            patience=2.0  # More patience for long silences
         )
+
+        if result is None:
+            raise ValueError("Transcription returned no results")
+
         return result
 
     except Exception as e:
@@ -150,6 +172,8 @@ def transcribe_and_save(file_path, url=None, title=None, description=None):
         result = transcribe_audio(file_path)
         text = result["text"]
         print(f"[vsm] Transcription complete:\n{text}")
+
+        # Save transcription with metadata
         transcription_file = f"{filename_without_extension}.txt"
         with open(transcription_file, "w", encoding='utf-8') as file:
             if(url):
@@ -161,16 +185,17 @@ def transcribe_and_save(file_path, url=None, title=None, description=None):
             file.write(text)
         print(f"[vsm] Saved transcription to {transcription_file}")
 
-        #save to srt file:
+        # Save SRT file
         srt_writer = get_writer("srt", path)
         srt_name = f"{filename}"
         print(f"[vsm] Saved srt to {path}/{srt_name}")
         srt_writer(result, srt_name)
 
-        return text
+        return text, url, title, description  # Return metadata along with text
 
     except Exception as e:
         print(f"[vsm] An error occurred while transcribing the file: {e}")
+        return None, None, None, None
 
 
 
@@ -213,23 +238,28 @@ def ollama_chat_print(summary):
 
 def traverse_and_transcribe(root_path):
     """Walk through all subfolders and transcribe audio/video files."""
-
-
     for subdir, _, files in os.walk(root_path):
         for file in files:
             if is_audio_or_video_file(file):
                 print(f"[vsm] Found audio/video file: {file}")
-
-                # Construct full file path
                 file_path = os.path.join(subdir, file)
 
-                # Transcribe file
-                text = transcribe_and_save(file_path)
-                #get OPEN AI key from os environment variable.
-                api_key = os.environ['DEEPSEEK_API_KEY']
-                summary = openai_summarize_text(text, api_key)
-                with open(f"{file_path}.takeaway.txt",'w', encoding='utf-8') as file:
-                    file.write(summary)
+                # Transcribe file and get metadata
+                text, url, title, description = transcribe_and_save(file_path)
+
+                if text:
+                    api_key = os.environ['DEEPSEEK_API_KEY']
+                    summary = openai_summarize_text(text, api_key)
+
+                    # Save takeaway with metadata
+                    with open(f"{file_path}.takeaway.txt", 'w', encoding='utf-8') as file:
+                        if url:
+                            file.write(f"URL: {url}\n")
+                        if title:
+                            file.write(f"Title: {title}\n")
+                        if description:
+                            file.write(f"Description: {description}\n\n")
+                        file.write(summary)
 
 def print_usage():
     """Prints the usage instructions for the script."""
@@ -271,7 +301,12 @@ def main():
     try:
         args = parser.parse_args()
 
-        text = None  # Initialize text variable to avoid reference before assignment
+        # Initialize all variables to avoid reference errors
+        text = None
+        url = None
+        title = None
+        description = None
+        takeaway_file = None  # Initialize takeaway_file
 
         if args.audio_url or args.video_url:
             try:
@@ -283,13 +318,19 @@ def main():
                 print(f"[vsm] Downloaded {'video' if args.video_url else 'audio'} to {args.path}")
 
                 if audio_file_path:
-                    text = transcribe_and_save(audio_file_path, args.audio_url or args.video_url, title, description)
+                    text, url, title, description = transcribe_and_save(
+                        audio_file_path,
+                        args.audio_url or args.video_url,
+                        title,
+                        description
+                    )
+                    takeaway_file = os.path.splitext(audio_file_path)[0]  # Set takeaway_file path
             except Exception as e:
                 print(f"[vsm] Error downloading video: {str(e)}")
                 sys.exit(1)
 
         elif args.transcribe:
-            text = transcribe_and_save(args.transcribe)
+            text, url, title, description = transcribe_and_save(args.transcribe)
             takeaway_file = os.path.splitext(args.transcribe)[0]
 
         elif args.summary:
@@ -313,13 +354,22 @@ def main():
         if text:
             api_key = os.environ['DEEPSEEK_API_KEY']
             summary = openai_summarize_text(text, api_key)
-            print("[vsm] " + summary)
 
             if takeaway_file:
                 takeaway_file = f"{takeaway_file}.takeaway.txt"
                 print("[vsm] Saving summary to:", takeaway_file)
                 with open(takeaway_file, 'w', encoding='utf-8') as f:
+                    if url:
+                        f.write(f"URL: {url}\n")
+                    if title:
+                        f.write(f"Title: {title}\n")
+                    if description:
+                        f.write(f"Description: {description}\n\n")
                     f.write(summary)
+
+                # Read and print the file content after writing
+                with open(takeaway_file, 'r', encoding='utf-8') as f:
+                    print(f.read())
 
     except Exception as e:
         print(f"[vsm] Error: {str(e)}")
