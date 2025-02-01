@@ -8,6 +8,8 @@ from whisper import available_models, load_model
 from whisper.utils import get_writer
 from openai import OpenAI
 import ollama
+import glob
+import re
 transcribe_model = None
 
 def download_youtube_transcript(url, path):
@@ -33,69 +35,102 @@ def download_youtube_transcript(url, path):
             file_path = os.path.join(path, f"{title}.a.en.srt")
 
         if os.path.exists(file_path):
-            print("Transcript downloaded successfully!")
+            print("[vsm] Transcript downloaded successfully!")
             return file_path
 
         raise ValueError("No English transcripts found")
     except Exception as e:
-        print(f"An error occurred: {e}")
+        print(f"[vsm] An error occurred: {e}")
         return None
+
+def is_valid_youtube_url(url):
+    """Check if the URL is a valid YouTube URL"""
+    youtube_regex = r'^(https?://)?(www\.)?(youtube\.com|youtu\.?be)/.+$'
+    return bool(re.match(youtube_regex, url))
 
 def download_youtube_video(url, path, video_mode=False):
     """Download the video or audio from a YouTube URL using yt-dlp"""
+    if not is_valid_youtube_url(url):
+        print("[vsm] Invalid YouTube URL")
+        return None, None, None
+
     try:
-        ydl_opts = {
+        os.makedirs(path, exist_ok=True)
+        base_ydl_opts = {
             'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best' if video_mode else 'bestaudio',
-            'outtmpl': os.path.join(path, '%(upload_date)s-%(title)s.%(ext)s'),
-            'quiet': True,
+            'quiet': False,
             'postprocessors': [],
+            'noplaylist': True,
+            'restrictfilenames': True  # Added for filename sanitization
         }
+
+        # First get metadata without downloading
+        with yt_dlp.YoutubeDL(base_ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            title = re.sub(r'[\\/*?:"<>|]', '', info.get('title', 'video')).replace(' ', '_')
+            upload_date = info.get('upload_date', '')
+            description = info.get('description', '')
+
+        # Build filename template with metadata
+        file_template = f"{upload_date}_{title}.%(ext)s" if upload_date else f"{title}.%(ext)s"
+
+        # Configure final download options
+        final_ydl_opts = {
+            **base_ydl_opts,
+            'outtmpl': os.path.join(path, file_template),
+        }
+
         if not video_mode:
-            ydl_opts['postprocessors'].append({
+            final_ydl_opts['postprocessors'].append({
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'wav',
+                'preferredquality': '192',
             })
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            title = info.get('title', 'video').replace(' ', '_')
-            description = info.get('description', '')
-            upload_date = info.get('upload_date', datetime.now().strftime('%Y%m%d'))
+        # Perform actual download
+        with yt_dlp.YoutubeDL(final_ydl_opts) as ydl:
             ydl.download([url])
 
-        ext = 'mp4' if video_mode else 'wav'
-        file_name = f"{upload_date}-{title}.{ext}"
-        final_path = os.path.join(path, file_name)
-        print(f"{'Video' if video_mode else 'Audio'} downloaded successfully!")
+        # Find downloaded file using the template pattern
+        pattern = os.path.join(path, f"{upload_date}_{title}.*" if upload_date else f"{title}.*")
+        downloaded_files = glob.glob(pattern)
+
+        if not downloaded_files:
+            raise FileNotFoundError(f"No files matching pattern: {pattern}")
+
+        # Get most recent file matching our download pattern
+        downloaded_files.sort(key=lambda x: os.path.getctime(x), reverse=True)
+        final_path = downloaded_files[0]
+
         return title, description, final_path
 
     except Exception as e:
-        print(f"An error occurred: {e}")
+        print(f"[vsm] An error occurred during download: {str(e)}")
+        print(f"[vsm] Error type: {type(e)}")
+        import traceback
+        traceback.print_exc()
         return None, None, None
 
 def transcribe_audio(audio_file_path):
     """Transcribe audio using Whisper AI and translate to English."""
     global transcribe_model
     try:
-        print("Transcribing the audio file...")
+        print("[vsm] Transcribing the audio file...")
         if transcribe_model is None:
-            transcribe_model = load_model("large-v3")
+            transcribe_model = load_model("large-v3-turbo")
 
-        # Transcribe the audio file
+        # Full transcription with detected or forced language
         result = transcribe_model.transcribe(
             audio_file_path,
-        #    task="translate",
-            verbose= True,
-            temperature=(0.1, 0.6),  # Range better than single value
-            no_speech_threshold=1,
-        #    word_timestamps=False,
-        #    hallucination_silence_threshold=3,
-        #    language="ja",  # Japanese audio
+            language="en",  # Force English
+            verbose=True,
+            temperature=(0.1, 0.6),
+            no_speech_threshold=0.8,
         )
         return result
 
     except Exception as e:
-        print(f"An error occurred: {e}")
+        print(f"[vsm] An error occurred: {e}")
         return None
 
 
@@ -110,12 +145,12 @@ def transcribe_and_save(file_path, url=None, title=None, description=None):
     path = os.path.dirname(file_path)
     filename = os.path.basename(file_path)
     filename_without_extension = os.path.splitext(filename)[0]
-    print("path:"+path)
-    print("filename:"+filename)
+    print("[vsm] path:"+path)
+    print("[vsm] filename:"+filename)
     try:
         result = transcribe_audio(file_path)
         text = result["text"]
-        print(f"Transcription complete:\n{text}")
+        print(f"[vsm] Transcription complete:\n{text}")
         transcription_file = f"{filename_without_extension}.txt"
         with open(transcription_file, "w", encoding='utf-8') as file:
             if(url):
@@ -125,29 +160,29 @@ def transcribe_and_save(file_path, url=None, title=None, description=None):
             if(description):
                 file.write(f"Description: {description}\n")
             file.write(text)
-        print(f"Saved transcription to {transcription_file}")
+        print(f"[vsm] Saved transcription to {transcription_file}")
 
         #save to srt file:
         srt_writer = get_writer("srt", path)
         srt_name = f"{filename}"
-        print(f"Saved srt to {path}/{srt_name}")
+        print(f"[vsm] Saved srt to {path}/{srt_name}")
         srt_writer(result, srt_name)
 
         return text
 
     except Exception as e:
-        print(f"An error occurred while transcribing the file: {e}")
+        print(f"[vsm] An error occurred while transcribing the file: {e}")
 
 
 
 def openai_summarize_text(text, api_key):
     """Summarize the text using AI SERVICE:"""
-    print(api_key)
-    print(text)
+    print("[vsm] " + api_key)
+    print("[vsm] " + text)
     try:
         client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
         response = client.chat.completions.create(
-            model="deepseek-chat",
+            model="deepseek-reasoner",
             messages=[
                 {"role": "system", "content": "Make a detailed takeaway of the text,and then an insight. If there is any sell rules, buy rules, and numbers, make sure include them in the takeaway. Please use the MD file syntax."},
                 {"role": "user", "content": text}
@@ -159,23 +194,23 @@ def openai_summarize_text(text, api_key):
         return response.choices[0].message.content
 
     except Exception as e:
-        print(f"An error occurred: {e}")
+        print(f"[vsm] An error occurred: {e}")
         return None
 
 #call ollama api to summary text
 def ollama_chat_print(summary):
-    print(f"Model: {summary['model']}")
-    print(f"Created At: {summary['created_at']}")
-    print(f"Message Role: {summary['message']['role']}")
-    print(f"Content: \n{summary['message']['content']}")
-    print(f"Done Reason: {summary['done_reason']}")
-    print(f"Done: {summary['done']}")
-    print(f"Total Duration: {summary['total_duration']}")
-    print(f"Load Duration: {summary['load_duration']}")
-    print(f"Prompt Eval Count: {summary['prompt_eval_count']}")
-    print(f"Prompt Eval Duration: {summary['prompt_eval_duration']}")
-    print(f"Eval Count: {summary['eval_count']}")
-    print(f"Eval Duration: {summary['eval_duration']}")
+    print(f"[vsm] Model: {summary['model']}")
+    print(f"[vsm] Created At: {summary['created_at']}")
+    print(f"[vsm] Message Role: {summary['message']['role']}")
+    print(f"[vsm] Content: \n{summary['message']['content']}")
+    print(f"[vsm] Done Reason: {summary['done_reason']}")
+    print(f"[vsm] Done: {summary['done']}")
+    print(f"[vsm] Total Duration: {summary['total_duration']}")
+    print(f"[vsm] Load Duration: {summary['load_duration']}")
+    print(f"[vsm] Prompt Eval Count: {summary['prompt_eval_count']}")
+    print(f"[vsm] Prompt Eval Duration: {summary['prompt_eval_duration']}")
+    print(f"[vsm] Eval Count: {summary['eval_count']}")
+    print(f"[vsm] Eval Duration: {summary['eval_duration']}")
 
 
 def ollama_summarize(text):
@@ -214,7 +249,7 @@ def traverse_and_transcribe(root_path):
     for subdir, _, files in os.walk(root_path):
         for file in files:
             if is_audio_or_video_file(file):
-                print(f"Found audio/video file: {file}")
+                print(f"[vsm] Found audio/video file: {file}")
 
                 # Construct full file path
                 file_path = os.path.join(subdir, file)
@@ -273,7 +308,7 @@ def main():
 
     if url and path:
         title, description, audio_file_path = download_youtube_video(url, path, video_mode)
-        print(f"Downloaded video to {path} and saved audio to {audio_file_path}")
+        print(f"[vsm] Downloaded video to {path} and saved audio to {audio_file_path}")
     if audio_file_path:
         text = transcribe_and_save(audio_file_path,url,title,description)
     if text:
@@ -281,16 +316,16 @@ def main():
         api_key = os.environ['DEEPSEEK_API_KEY']
         summary = openai_summarize_text(text, api_key)
         #summary = ollama_summarize(text)
-        print(summary)
+        print("[vsm] " + summary)
         if takeaway_file:
             takeaway_file = f"{takeaway_file}.takeaway.txt"
-            print("save to file:"+takeaway_file)
+            print("[vsm] save to file:"+takeaway_file)
             with open(takeaway_file,'w', encoding='utf-8') as file:
                 file.write(summary)
     if root:
         traverse_and_transcribe(root)
     else:
-        print(f"No audio file path provided.")
+        print(f"[vsm] No audio file path provided.")
 
 
 
