@@ -264,68 +264,97 @@ def traverse_and_transcribe(root_path):
 
 def print_usage():
     """Prints the usage instructions for the script."""
-    print("Error in command line arguments.")
+    print("Video Summary Manager (vsm) - A tool for downloading, transcribing, and summarizing video/audio content")
     print("Usage:")
-    print("  python3 vsm_main.py -a <youtube-video-url> -p <path/to/save/file>")
-    print("  python3 vsm_main.py -v <youtube-video-url> -p <path/to/save/file>")
-    print("  python3 vsm_main.py -t <path/to/audio/file>")
-    print("  python3 vsm_main.py -f <file/to/summary>")
-    print("  python3 vsm_main.py -c <string/to/summary>")
+    print("  vsm_main.py [options]")
+    print("\nOptions:")
+    print("  -a, --audio-url      YouTube URL to download audio from")
+    print("  -v, --video-url      YouTube URL to download video from")
+    print("  -p, --path           Path to save downloaded files (default: ./)")
+    print("  -t, --transcribe     Path to audio file to transcribe")
+    print("  -s, --summary        Path to text file to summarize")
+    print("  -c, --content        Direct text content to summarize")
+    print("  -r, --recursive      Process all audio/video files in directory recursively")
+    print("  -h, --help           Show this help message and exit")
 
 def main():
     """Main function to parse command-line arguments and perform actions."""
-    args = sys.argv
-    url, path, text, audio_file_path, api_key = "", "./", "", "", "your-api-key"
-    title, description = "", ""
-    video_mode = False
-    root = ""
-    transcription_file = ""
-    takeaway_file=""
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Video Summary Manager (vsm) - A tool for downloading, transcribing, and summarizing video/audio content",
+        add_help=False
+    )
+
+    # Define mutually exclusive group for main actions
+    action_group = parser.add_mutually_exclusive_group()
+    action_group.add_argument('-a', '--audio-url', help='YouTube URL to download audio from')
+    action_group.add_argument('-v', '--video-url', help='YouTube URL to download video from')
+    action_group.add_argument('-t', '--transcribe', help='Path to audio file to transcribe')
+    action_group.add_argument('-s', '--summary', help='Path to text file to summarize')
+    action_group.add_argument('-c', '--content', help='Direct text content to summarize')
+    action_group.add_argument('-r', '--recursive', help='Process all audio/video files in directory recursively')
+
+    # Optional arguments
+    parser.add_argument('-p', '--path', default='./', help='Path to save downloaded files (default: ./)')
+    parser.add_argument('-h', '--help', action='help', help='Show this help message and exit')
+
     try:
-        if "-a" in args:
-            url = args[args.index("-a")+1]
-        if "-v" in args:
-            url = args[args.index("-v")+1]
-            video_mode = True
-        if "-p" in args:
-            path = args[args.index("-p")+1]
-        if "-t" in args:
-            audio_file_path = args[args.index("-t")+1]
-            takeaway_file = takeaway_file = os.path.splitext(audio_file_path)[0]
-        if "-c" in args:
-            text = args[args.index("-c")+1]
-        if "-f" in args:
-            print("open " + args[args.index("-f")+1])
-            with open(args[args.index("-f")+1], 'r') as file:
-                text = file.read()
-            takeaway_file = os.path.splitext(file.name)[0]
-        if "-r" in args:
-            root = args[args.index("-r")+1]
-    except:
-        print_usage()
+        args = parser.parse_args()
 
+        text = None  # Initialize text variable to avoid reference before assignment
 
+        if args.audio_url or args.video_url:
+            try:
+                title, description, audio_file_path = download_youtube_video(
+                    args.audio_url or args.video_url,
+                    args.path,
+                    video_mode=bool(args.video_url)
+                )
+                print(f"[vsm] Downloaded {'video' if args.video_url else 'audio'} to {args.path}")
 
-    if url and path:
-        title, description, audio_file_path = download_youtube_video(url, path, video_mode)
-        print(f"[vsm] Downloaded video to {path} and saved audio to {audio_file_path}")
-    if audio_file_path:
-        text = transcribe_and_save(audio_file_path,url,title,description)
-    if text:
-        #get key from os environment variable.
-        api_key = os.environ['DEEPSEEK_API_KEY']
-        summary = openai_summarize_text(text, api_key)
-        #summary = ollama_summarize(text)
-        print("[vsm] " + summary)
-        if takeaway_file:
-            takeaway_file = f"{takeaway_file}.takeaway.txt"
-            print("[vsm] save to file:"+takeaway_file)
-            with open(takeaway_file,'w', encoding='utf-8') as file:
-                file.write(summary)
-    if root:
-        traverse_and_transcribe(root)
-    else:
-        print(f"[vsm] No audio file path provided.")
+                if audio_file_path:
+                    text = transcribe_and_save(audio_file_path, args.audio_url or args.video_url, title, description)
+            except Exception as e:
+                print(f"[vsm] Error downloading video: {str(e)}")
+                sys.exit(1)
+
+        elif args.transcribe:
+            text = transcribe_and_save(args.transcribe)
+            takeaway_file = os.path.splitext(args.transcribe)[0]
+
+        elif args.summary:
+            with open(args.summary, 'r') as f:
+                text = f.read()
+            takeaway_file = os.path.splitext(args.summary)[0]
+
+        elif args.content:
+            text = args.content
+            takeaway_file = "summary"
+
+        elif args.recursive:
+            traverse_and_transcribe(args.recursive)
+            return
+
+        else:
+            parser.print_help()
+            return
+
+        # Process summary if we have text
+        if text:
+            api_key = os.environ['DEEPSEEK_API_KEY']
+            summary = openai_summarize_text(text, api_key)
+            print("[vsm] " + summary)
+
+            if takeaway_file:
+                takeaway_file = f"{takeaway_file}.takeaway.txt"
+                print("[vsm] Saving summary to:", takeaway_file)
+                with open(takeaway_file, 'w', encoding='utf-8') as f:
+                    f.write(summary)
+
+    except Exception as e:
+        print(f"[vsm] Error: {str(e)}")
+        sys.exit(1)
 
 
 
