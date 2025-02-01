@@ -1,6 +1,3 @@
-I'll help you create a basic README.md file for your project. Here's a markdown file that documents the key aspects of your video summary manager:
-
-```markdown:README.md
 # Video Summary Manager (VSM)
 
 A Python tool for downloading, transcribing, and summarizing video/audio content from YouTube or local files.

@@ -7,7 +7,6 @@ from datetime import datetime
 from whisper import available_models, load_model
 from whisper.utils import get_writer
 from openai import OpenAI
-import ollama
 import glob
 import re
 transcribe_model = None
@@ -211,36 +210,6 @@ def ollama_chat_print(summary):
     print(f"[vsm] Prompt Eval Duration: {summary['prompt_eval_duration']}")
     print(f"[vsm] Eval Count: {summary['eval_count']}")
     print(f"[vsm] Eval Duration: {summary['eval_duration']}")
-
-
-def ollama_summarize(text):
-    """Summarize text using the Ollama API."""
-    prompt = "Summarize the following text into detailed key long takeaways. it also contains important info and a insight at the end: "
-    chat_url = "http://localhost:11434/api/chat"
-    query_url = "http://localhost:11434/api/generate"
-    model = "llama3-gradient:latest"
-    payload = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": prompt},
-            {"role": "user", "content": text}
-        ],
-        "stream": False
-    }
-
-    query = {
-        "model": "llama3-gradient:latest",
-        "prompt": prompt + text,
-        "options": {
-            "num_ctx": 16000
-        }
-    }
-
-    headers = {
-        'Content-Type': 'application/json'
-    }
-    response = ollama.generate(model=model, prompt=prompt+text)
-    return response['response']
 
 def traverse_and_transcribe(root_path):
     """Walk through all subfolders and transcribe audio/video files."""
