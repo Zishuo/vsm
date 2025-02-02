@@ -1,3 +1,7 @@
 yt-dlp>=2023.11.16
 openai>=1.12.0
 whisper>=1.0
+langdetect
+PyMuPDF
+tiktoken
+fitz  # Typically PyMuPDF doesn't require this line but added if needed.
