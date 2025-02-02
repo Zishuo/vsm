@@ -9,6 +9,7 @@ from whisper.utils import get_writer
 from openai import OpenAI
 import glob
 import re
+import fitz  # PyMuPDF
 transcribe_model = None
 
 def download_youtube_transcript(url, path):
@@ -154,12 +155,28 @@ def transcribe_audio(audio_file_path):
         print(f"[vsm] An error occurred: {e}")
         return None
 
-
 def is_audio_or_video_file(file_name):
     """Determines if a given file is an audio or video file based on its extension."""
     audio_video_extensions = {'.mp3', '.wav', '.mp4', '.m4a', '.flv', '.avi', '.mov', '.wmv', '.mkv'}
     _, ext = os.path.splitext(file_name)
     return ext.lower() in audio_video_extensions
+
+def is_pdf_file(file_name):
+    """Check if a file is a PDF based on its extension"""
+    _, ext = os.path.splitext(file_name)
+    return ext.lower() == '.pdf'
+
+def extract_text_from_pdf(pdf_path):
+    """Extract text from a PDF file using PyMuPDF"""
+    try:
+        text = ""
+        with fitz.open(pdf_path) as doc:
+            for page in doc:
+                text += page.get_text()
+        return text
+    except Exception as e:
+        print(f"[vsm] Error reading PDF: {e}")
+        return None
 
 def transcribe_and_save(file_path, url=None, title=None, description=None):
     """Transcribe a single audio/video file and save the transcript to disk."""
@@ -196,8 +213,6 @@ def transcribe_and_save(file_path, url=None, title=None, description=None):
     except Exception as e:
         print(f"[vsm] An error occurred while transcribing the file: {e}")
         return None, None, None, None
-
-
 
 def openai_summarize_text(text, api_key):
     """Summarize the text using AI SERVICE:"""
@@ -334,8 +349,11 @@ def main():
             takeaway_file = os.path.splitext(args.transcribe)[0]
 
         elif args.summary:
-            with open(args.summary, 'r') as f:
-                text = f.read()
+            if is_pdf_file(args.summary):
+                text = extract_text_from_pdf(args.summary)
+            else:
+                with open(args.summary, 'r', encoding='utf-8') as f:
+                    text = f.read()
             takeaway_file = os.path.splitext(args.summary)[0]
 
         elif args.content:
