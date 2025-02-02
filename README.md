@@ -14,8 +14,8 @@ A Python tool for downloading, transcribing, and summarizing video/audio content
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/video-summary-manager.git
-cd video-summary-manager
+git https://github.com/Zishuo/vsm.git
+cd vsm
 ```
 
 2. Install dependencies:
@@ -25,7 +25,11 @@ pip install -r requirements.txt
 
 3. Set up environment variables:
 ```bash
+
+export OPENAI_API_KEY="your_api_key_here"
 export DEEPSEEK_API_KEY="your_api_key_here"
+export LLM_BASE_URL="your_llm_server_base_url_here"
+export LLM_MODEL_NAME="your_model_name_here"
 ```
 
 ## Usage
