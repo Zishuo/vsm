@@ -5,8 +5,8 @@ A Python tool for downloading, transcribing, and summarizing video/audio content
 ## Features
 
 - 🎥 Download YouTube videos or audio
-- 📝 Automatic transcription using Whisper AI
-- 🤖 AI-powered summarization using Deepseek or Ollama
+- 📝 Automatic transcription using local openai Whispe , the latest large-v3-turbo
+- 🤖 AI-powered summarization using OpenAI,Deepseek,Ollama, even with openwebui proxied api
 - 📂 Batch processing of audio/video files
 - 📄 Save transcriptions and summaries in multiple formats (txt, srt)
 
